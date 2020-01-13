@@ -51,6 +51,55 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
 static void esp_gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param);
 static void gattc_profile_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param);
 
+#define RUUVI_TAG "ruuvi-decoder"
+
+static void esp32_ruuvi_decode(uint8_t* buffer, size_t buffer_len) {
+    switch (buffer[0]) {
+        case 0x03:
+            ESP_LOGE(RUUVI_TAG, "Ruuvi decoder does not support RAWv1 format (0x03)!");
+            break;
+        case 0x05:
+            if (buffer_len != 24) {
+                ESP_LOGE(RUUVI_TAG, "Bad length for RAWv2: %i", buffer_len);
+                break;
+            }
+
+            int16_t t_val = buffer[1] << 8 | buffer[2];
+            float temperature = t_val * 0.005;
+            ESP_LOGI(RUUVI_TAG, "temperature is %f", temperature);
+
+            uint16_t h_val = buffer[3] << 8 | buffer[4];
+            float humidity = h_val * 0.0025;
+            ESP_LOGI(RUUVI_TAG, "humidity is %f", humidity);
+
+            int pressure = (buffer[5] << 8 | buffer[6]) + 50000;
+            ESP_LOGI(RUUVI_TAG, "pressure is %i", pressure);
+
+            int16_t a_x_val = buffer[7] << 8 | buffer[8];
+            ESP_LOGI(RUUVI_TAG, "accel x %f", a_x_val / 1000.0);
+
+            int16_t a_y_val = buffer[9] << 8 | buffer[10];
+            ESP_LOGI(RUUVI_TAG, "accel y %f", a_y_val / 1000.0);
+
+            int16_t a_z_val = buffer[11] << 8 | buffer[12];
+            ESP_LOGI(RUUVI_TAG, "accel z %f", a_z_val / 1000.0);
+
+            uint16_t v_bat_tx_pwr = (buffer[13] << 8 | buffer[14]);
+            float v_bat =  (v_bat_tx_pwr >> 5) / 1000.0 + 1.6;
+            ESP_LOGI(RUUVI_TAG, "v_bat is %f", v_bat);
+
+            int8_t tx_pwr = (buffer[14] & 0x1f) * 2 - 40;
+            ESP_LOGI(RUUVI_TAG, "tx power is %i", tx_pwr);
+
+            uint8_t mov_cnt = buffer[15];
+            ESP_LOGI(RUUVI_TAG, "movement cnt %i", mov_cnt);
+
+            uint16_t seq_num = buffer[16] << 8 | buffer[17];
+            ESP_LOGI(RUUVI_TAG, "seq num %u", seq_num);
+            break;
+    }
+}
+
 
 static esp_bt_uuid_t remote_filter_service_uuid = {
     .len = ESP_UUID_LEN_16,
@@ -315,7 +364,7 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
     switch (event) {
     case ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT: {
         //the unit of the duration is second
-        uint32_t duration = 30;
+        uint32_t duration = 0; //Scan an indefinitely long time?
         esp_ble_gap_start_scanning(duration);
         break;
     }
@@ -332,6 +381,19 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
         esp_ble_gap_cb_param_t *scan_result = (esp_ble_gap_cb_param_t *)param;
         switch (scan_result->scan_rst.search_evt) {
         case ESP_GAP_SEARCH_INQ_RES_EVT:
+            
+            if (scan_result->scan_rst.adv_data_len > 0) {
+                if (scan_result->scan_rst.adv_data_len > 7) {
+                    if (scan_result->scan_rst.ble_adv[5] == 0x99 && scan_result->scan_rst.ble_adv[6] == 0x04) {
+                        /* It is a Ruuvi tag! */
+                        const size_t manuf_data_len = scan_result->scan_rst.adv_data_len - 7;
+                        uint8_t *manuf_data = &(scan_result->scan_rst.ble_adv[7]);
+
+                        esp32_ruuvi_decode(manuf_data, manuf_data_len);
+                    }
+                }
+            }
+#if 0
             esp_log_buffer_hex(GATTC_TAG, scan_result->scan_rst.bda, 6);
             ESP_LOGI(GATTC_TAG, "searched Adv Data Len %d, Scan Response Len %d", scan_result->scan_rst.adv_data_len, scan_result->scan_rst.scan_rsp_len);
             adv_name = esp_ble_resolve_adv_data(scan_result->scan_rst.ble_adv,
@@ -339,7 +401,7 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
             ESP_LOGI(GATTC_TAG, "searched Device Name Len %d", adv_name_len);
             esp_log_buffer_char(GATTC_TAG, adv_name, adv_name_len);
 
-#if CONFIG_EXAMPLE_DUMP_ADV_DATA_AND_SCAN_RESP
+
             if (scan_result->scan_rst.adv_data_len > 0) {
                 ESP_LOGI(GATTC_TAG, "adv data:");
                 esp_log_buffer_hex(GATTC_TAG, &scan_result->scan_rst.ble_adv[0], scan_result->scan_rst.adv_data_len);
@@ -348,20 +410,10 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
                 ESP_LOGI(GATTC_TAG, "scan resp:");
                 esp_log_buffer_hex(GATTC_TAG, &scan_result->scan_rst.ble_adv[scan_result->scan_rst.adv_data_len], scan_result->scan_rst.scan_rsp_len);
             }
-#endif
-            ESP_LOGI(GATTC_TAG, "\n");
 
-            if (adv_name != NULL) {
-                if (strlen(remote_device_name) == adv_name_len && strncmp((char *)adv_name, remote_device_name, adv_name_len) == 0) {
-                    ESP_LOGI(GATTC_TAG, "searched device %s\n", remote_device_name);
-                    if (connect == false) {
-                        connect = true;
-                        ESP_LOGI(GATTC_TAG, "connect to the remote device.");
-                        esp_ble_gap_stop_scanning();
-                        esp_ble_gattc_open(gl_profile_tab[PROFILE_A_APP_ID].gattc_if, scan_result->scan_rst.bda, scan_result->scan_rst.ble_addr_type, true);
-                    }
-                }
-            }
+            ESP_LOGI(GATTC_TAG, "(end)\n");
+#endif
+
             break;
         case ESP_GAP_SEARCH_INQ_CMPL_EVT:
             break;
