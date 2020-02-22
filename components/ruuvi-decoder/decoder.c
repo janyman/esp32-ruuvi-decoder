@@ -1,8 +1,10 @@
+#include <string.h>
+#include "esp_log.h"
 
 #define RUUVI_TAG "ruuvi-decoder"
 #include "decoder.h"
 
-void esp32_ruuvi_decode(uint8_t* buffer, size_t buffer_len, struct esp32_ruuvi_dataset *output) {
+bool esp32_ruuvi_decode(uint8_t* buffer, size_t buffer_len, struct esp32_ruuvi_dataset *output) {
     bool retval = false;
 
     switch (buffer[0]) {
@@ -16,7 +18,7 @@ void esp32_ruuvi_decode(uint8_t* buffer, size_t buffer_len, struct esp32_ruuvi_d
                 retval = false;
                 break;
             }
-
+ 
             int16_t t_val = buffer[1] << 8 | buffer[2];
             float temperature = t_val * 0.005;
             ESP_LOGI(RUUVI_TAG, "temperature is %f", temperature);
@@ -50,15 +52,15 @@ void esp32_ruuvi_decode(uint8_t* buffer, size_t buffer_len, struct esp32_ruuvi_d
 
             int8_t tx_pwr = (buffer[14] & 0x1f) * 2 - 40;
             ESP_LOGI(RUUVI_TAG, "tx power is %i", tx_pwr);
-            output->tx_power;
+            output->tx_power = tx_pwr;
 
             uint8_t mov_cnt = buffer[15];
             ESP_LOGI(RUUVI_TAG, "movement cnt %i", mov_cnt);
-            output->movement_cnt;
+            output->movement_cnt = mov_cnt;
 
             uint16_t seq_num = buffer[16] << 8 | buffer[17];
             ESP_LOGI(RUUVI_TAG, "seq num %u", seq_num);
-            output->seq_num;
+            output->seq_num = seq_num;
 
             memcpy(output->src_mac_addr, &buffer[18], RUUVI_MAC_ADDR_LEN);
             
