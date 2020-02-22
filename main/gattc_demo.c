@@ -382,17 +382,19 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
         switch (scan_result->scan_rst.search_evt) {
         case ESP_GAP_SEARCH_INQ_RES_EVT:
             
-            if (scan_result->scan_rst.adv_data_len > 0) {
-                if (scan_result->scan_rst.adv_data_len > 7) {
-                    if (scan_result->scan_rst.ble_adv[5] == 0x99 && scan_result->scan_rst.ble_adv[6] == 0x04) {
-                        /* It is a Ruuvi tag! */
-                        const size_t manuf_data_len = scan_result->scan_rst.adv_data_len - 7;
-                        uint8_t *manuf_data = &(scan_result->scan_rst.ble_adv[7]);
+            
+            if (scan_result->scan_rst.adv_data_len > 7) {
+                if (scan_result->scan_rst.ble_adv[5] == 0x99 && scan_result->scan_rst.ble_adv[6] == 0x04) {
+                    /* It is a Ruuvi tag! */
+                    const size_t manuf_data_len = scan_result->scan_rst.adv_data_len - 7;
+                    uint8_t *manuf_data = &(scan_result->scan_rst.ble_adv[7]);
 
-                        esp32_ruuvi_decode(manuf_data, manuf_data_len);
-                    }
+                    ESP_LOGI(GATTC_TAG, "Received at rssi: %i", scan_result->scan_rst.rssi);
+
+                    esp32_ruuvi_decode(manuf_data, manuf_data_len);
                 }
             }
+            
 #if 0
             esp_log_buffer_hex(GATTC_TAG, scan_result->scan_rst.bda, 6);
             ESP_LOGI(GATTC_TAG, "searched Adv Data Len %d, Scan Response Len %d", scan_result->scan_rst.adv_data_len, scan_result->scan_rst.scan_rsp_len);
