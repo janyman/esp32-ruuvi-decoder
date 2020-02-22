@@ -54,3 +54,4 @@ dkms.conf
 #esp-idf
 /build
 /sdkconfig.old
+/components
