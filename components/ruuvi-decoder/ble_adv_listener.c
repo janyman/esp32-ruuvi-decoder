@@ -1,10 +1,13 @@
+/**
+ * BLE advert boardcast listener for Ruuvi tags
+ * 
+ * This part of the program is based on the BLE GATT client demo from esp-idf 3.3.
+ */
 
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include "nvs.h"
-#include "nvs_flash.h"
 
 #include "esp_bt.h"
 #include "esp_gap_ble_api.h"
@@ -424,7 +427,7 @@ static void esp_gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
 
 void esp32_ruuvi_listener_start(void) {
     esp_err_t ret;
-    
+
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
