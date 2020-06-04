@@ -17,6 +17,7 @@
 #include "esp_gatt_common_api.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 #include "ble_adv_listener.h"
 #include "decoder.h"
@@ -39,7 +40,7 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
 static void esp_gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param);
 static void gattc_profile_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param);
 
-
+QueueHandle_t ruuvi_output_queue;
 
 
 static esp_bt_uuid_t remote_filter_service_uuid = {
@@ -334,6 +335,12 @@ static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
 
                     struct esp32_ruuvi_dataset dataset;
                     esp32_ruuvi_decode(manuf_data, manuf_data_len, &dataset);
+                    if (ruuvi_output_queue == NULL) {
+                        ESP_LOGE(GATTC_TAG, "Ruuvi output queue not created!");
+                    }
+                    else if (xQueueSend(ruuvi_output_queue, &dataset, 0) != pdTRUE) {
+                        ESP_LOGE(GATTC_TAG, "Cannot put to Ruuvi output queue!");
+                    }
                 }
             }
             
@@ -425,7 +432,7 @@ static void esp_gattc_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
     } while (0);
 }
 
-void esp32_ruuvi_listener_start(void) {
+void esp32_ruuvi_listener_start(QueueHandle_t output_queue) {
     esp_err_t ret;
 
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
@@ -479,4 +486,5 @@ void esp32_ruuvi_listener_start(void) {
         ESP_LOGE(GATTC_TAG, "set local  MTU failed, error code = %x", local_mtu_ret);
     }
 
+    ruuvi_output_queue = output_queue;
 }
